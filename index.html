@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Planificación de la producción — Previsión de demanda</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root{
+  --azul:#003b73; --azul-claro:#e6eef7; --azul-medio:#2c5f95;
+  --fondo:#f3f5f8; --superficie:#ffffff; --texto:#1f2933; --texto-suave:#5b6675;
+  --borde:#d5dbe3; --peligro:#b42318; --peligro-fondo:#fdecea; --ok:#1e7d3c;
+  --aviso-fondo:#fff4d6; --aviso-borde:#e7c46a;
+  --radio:4px; --max:1200px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --fondo:#12161c; --superficie:#1a2029; --texto:#e6e9ee; --texto-suave:#a3adba;
+    --borde:#2d3540; --azul-claro:#1d2b3d; --peligro-fondo:#3a1d1a; --aviso-fondo:#3a3116;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --fondo:#12161c; --superficie:#1a2029; --texto:#e6e9ee; --texto-suave:#a3adba;
+  --borde:#2d3540; --azul-claro:#1d2b3d; --peligro-fondo:#3a1d1a; --aviso-fondo:#3a3116;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--fondo); color:var(--texto);
+  font-family:"IBM Plex Sans",Arial,Helvetica,sans-serif; font-size:16px; line-height:1.45;
+  font-variant-numeric:tabular-nums;
+}
+h1,h2,h3{color:var(--azul); margin:0; font-weight:600; line-height:1.2}
+h2{font-size:22px; font-weight:500; border-bottom:1px solid var(--borde); padding-bottom:6px; margin-bottom:18px}
+[data-theme="dark"] h1,[data-theme="dark"] h2,[data-theme="dark"] h3{color:#9cc4f0}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) h1, :root:not([data-theme="light"]) h2, :root:not([data-theme="light"]) h3{color:#9cc4f0} }
+p{margin:0}
+button{font:inherit; cursor:pointer}
+button:disabled{cursor:not-allowed; opacity:.65}
+:focus-visible{outline:3px solid #f5a623; outline-offset:2px}
+[hidden]{display:none !important}
+.sr-only{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0)}
+
+/* ---- Botones ---- */
+.btn{border:1px solid var(--azul); background:var(--azul); color:#fff; padding:10px 18px; border-radius:var(--radio); font-weight:500; display:inline-flex; align-items:center; gap:10px}
+.btn:hover:not(:disabled){background:var(--azul-medio); border-color:var(--azul-medio)}
+.btn.sec{background:transparent; color:var(--azul); border-color:var(--azul)}
+.btn.sec:hover:not(:disabled){background:var(--azul-claro)}
+.cab .btn:not(.sec){background:#fff; color:var(--azul); border-color:#fff}
+.cab .btn:not(.sec):hover:not(:disabled){background:#e6eef7; border-color:#e6eef7}
+.cab .spinner{border-color:rgba(0,59,115,.25); border-top-color:var(--azul)}
+.cab .btn.sec{color:#fff; border-color:rgba(255,255,255,.7)}
+.cab .btn.sec:hover:not(:disabled){background:rgba(255,255,255,.12)}
+.btn.small{padding:6px 12px; font-size:14px}
+.spinner{width:16px; height:16px; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; border-radius:50%; animation:gira .8s linear infinite}
+@media (prefers-reduced-motion: reduce){ .spinner{animation:none; border-top-color:rgba(255,255,255,.4)} }
+@keyframes gira{to{transform:rotate(360deg)}}
+
+/* ---- Pantalla de acceso ---- */
+#login{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; background:var(--azul)}
+.login-caja{background:var(--superficie); width:100%; max-width:440px; padding:36px 32px; border-radius:var(--radio); border-top:6px solid #ffd19a}
+.login-caja h1{font-size:26px; margin-bottom:6px}
+.login-caja .sub{color:var(--texto-suave); margin-bottom:26px; font-size:15px}
+.login-caja label{display:block; font-weight:500; margin-bottom:6px}
+.login-caja input{width:100%; font:inherit; padding:11px 12px; border:1px solid var(--borde); border-radius:var(--radio); background:var(--superficie); color:var(--texto); margin-bottom:14px}
+.login-caja .btn{width:100%; justify-content:center}
+.login-error{color:var(--peligro); background:var(--peligro-fondo); border-left:4px solid var(--peligro); padding:8px 12px; margin-bottom:14px; font-size:15px}
+.login-nota{color:var(--texto-suave); font-size:13px; margin-top:18px; line-height:1.4}
+.login-demo{margin-top:16px; text-align:center}
+.enlace{background:none; border:none; color:var(--azul); text-decoration:underline; padding:4px}
+.login-pie{color:rgba(255,255,255,.75); font-size:13px; text-align:center; margin-top:18px}
+
+/* ---- Cabecera ---- */
+.cab{background:var(--azul); color:#fff; padding:22px 0 20px}
+.cab .int{max-width:var(--max); margin:0 auto; padding:0 24px; display:flex; flex-wrap:wrap; gap:18px 32px; align-items:flex-end; justify-content:space-between}
+.cab .int>div:first-child{flex:1 1 480px; min-width:0}
+.cab h1{color:#fff; font-size:24px; margin-bottom:4px}
+.cab .prod{color:rgba(255,255,255,.85); font-size:15px; margin-bottom:12px}
+.meta{display:flex; flex-wrap:wrap; gap:6px 22px; font-size:14px; color:rgba(255,255,255,.9)}
+.meta b{font-weight:500; color:#fff}
+.acciones{display:flex; flex-direction:column; align-items:flex-end; gap:10px; margin-left:auto; flex:0 1 auto}
+.acciones .fila{display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end}
+.contador{font-size:14px; background:rgba(255,255,255,.12); padding:6px 12px; border-radius:var(--radio); border:1px solid rgba(255,255,255,.25)}
+.contador.agotado{background:#ffe8cc; color:#222; border-color:#ffd19a}
+.estado-linea{font-size:14px; color:rgba(255,255,255,.85); min-height:1.3em; text-align:right; max-width:520px}
+.fuente{display:inline-block; font-size:13px; padding:3px 10px; border-radius:var(--radio); background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.3)}
+.fuente.demo{background:#ffd19a; color:#222; border-color:#ffd19a}
+
+/* ---- Avisos ---- */
+.banda{max-width:var(--max); margin:18px auto 0; padding:0 24px}
+.aviso{border-left:5px solid var(--aviso-borde); background:var(--aviso-fondo); padding:12px 16px; border-radius:var(--radio); display:flex; flex-wrap:wrap; gap:10px 20px; align-items:center; justify-content:space-between}
+.aviso.error{border-left-color:var(--peligro); background:var(--peligro-fondo)}
+.aviso .txt{flex:1 1 380px}
+.aviso .txt b{font-weight:600}
+.aviso .acc{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+.aviso select{font:inherit; font-size:14px; padding:6px 8px; border:1px solid var(--borde); border-radius:var(--radio); background:var(--superficie); color:var(--texto)}
+
+/* ---- Contenido ---- */
+main{max-width:var(--max); margin:0 auto; padding:28px 24px 60px}
+section{margin-bottom:44px}
+.sec-cab{display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:8px 16px; border-bottom:1px solid var(--borde); margin-bottom:18px}
+.sec-cab h2{border:0; margin:0; padding-bottom:6px}
+.sec-cab .nota{color:var(--texto-suave); font-size:14px}
+
+.tarjetas{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px}
+@media (min-width:700px){ .tarjetas{grid-template-columns:repeat(3,1fr)} }
+@media (min-width:1100px){ .tarjetas{grid-template-columns:repeat(6,1fr)} }
+.tarjeta{background:var(--superficie); border:1px solid var(--borde); border-top:4px solid var(--azul); border-radius:var(--radio); padding:14px 16px 12px; min-height:118px}
+.tarjeta .et{font-size:14px; color:var(--texto-suave); margin-bottom:6px}
+.tarjeta .valor{font-size:30px; font-weight:600; line-height:1.1; letter-spacing:-.01em}
+.tarjeta .valor small{font-size:15px; font-weight:400; color:var(--texto-suave); margin-left:3px}
+.tarjeta .sub{font-size:14px; color:var(--texto-suave); margin-top:6px}
+.tarjeta .sub.mal{color:var(--peligro); font-weight:500}
+.tarjeta .sub.bien{color:var(--ok)}
+.tarjeta.estado{color:#222; border-top-width:4px}
+.tarjeta.estado .et,.tarjeta.estado .sub{color:#333}
+.tarjeta.estado .valor{font-size:22px; line-height:1.2}
+
+.meses{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-top:16px}
+.mes-chip{padding:10px 12px; border-radius:var(--radio); color:#222; border:1px solid rgba(0,0,0,.08)}
+.mes-chip .m{font-weight:600; text-transform:capitalize}
+.mes-chip .e{font-size:13px}
+.mes-chip .u{font-size:13px; color:#444}
+
+.graficos{display:grid; grid-template-columns:1fr; gap:18px}
+@media (min-width:900px){ .graficos{grid-template-columns:1fr 1fr} }
+.grafico{background:var(--superficie); border:1px solid var(--borde); border-radius:var(--radio); padding:16px}
+.grafico h3{font-size:17px; font-weight:500; margin-bottom:4px}
+.grafico .nota{font-size:13px; color:var(--texto-suave); margin-bottom:10px}
+.grafico .lienzo{position:relative; height:300px}
+.grafico .fallback{color:var(--texto-suave); font-size:14px; padding:20px}
+
+.alertas{display:grid; grid-template-columns:1fr; gap:16px}
+@media (min-width:900px){ .alertas{grid-template-columns:1fr 1fr} }
+.alerta{color:#222; padding:16px 18px 18px; border-radius:var(--radio)}
+.alerta .cabecera{display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:6px 12px; padding:8px 12px; margin:-2px -4px 12px; border-radius:var(--radio); font-weight:600; font-size:17px}
+.alerta .cabecera .tipo{font-size:13px; font-weight:500; background:rgba(255,255,255,.55); padding:2px 8px; border-radius:var(--radio)}
+.alerta p{font-size:15px; margin-bottom:8px}
+.alerta p b{font-weight:600}
+.alerta p:last-child{margin-bottom:0}
+.vacio{color:var(--texto-suave); font-size:15px; padding:14px 0}
+
+.tabla-env{background:var(--superficie); border:1px solid var(--borde); border-radius:var(--radio); overflow-x:auto}
+table{border-collapse:collapse; width:100%; font-size:14px}
+th,td{padding:8px 8px; border-bottom:1px solid var(--borde); text-align:left; white-space:nowrap; vertical-align:top}
+th{background:var(--azul-claro); font-weight:600; font-size:13px; position:sticky; top:0}
+th:first-child,td:first-child{padding-left:12px}
+td.num,th.num{text-align:right}
+td.mes{text-transform:capitalize; font-weight:500}
+td.texto{white-space:normal; min-width:260px}
+tr:last-child td{border-bottom:0}
+.pill{display:inline-block; padding:2px 9px; border-radius:12px; font-size:13px; font-weight:500; color:#222; white-space:nowrap}
+td.estado{white-space:normal; min-width:120px}
+
+details{background:var(--superficie); border:1px solid var(--borde); border-radius:var(--radio)}
+summary{cursor:pointer; padding:14px 18px; font-weight:500; color:var(--azul); font-size:17px; list-style:none; display:flex; align-items:center; gap:10px}
+summary::-webkit-details-marker{display:none}
+summary::before{content:""; width:8px; height:8px; border-right:2px solid currentColor; border-bottom:2px solid currentColor; transform:rotate(-45deg); transition:transform .15s}
+details[open] summary::before{transform:rotate(45deg)}
+.det-cuerpo{padding:0 18px 18px; border-top:1px solid var(--borde)}
+#informeFrame{width:100%; max-width:800px; border:0; background:#fff; min-height:200px; display:block; margin:14px auto 0}
+.informe-nota{font-size:14px; color:var(--texto-suave); margin-top:12px}
+
+.arq{display:flex; flex-wrap:wrap; gap:8px; align-items:stretch; margin:16px 0 22px}
+.arq .caja{flex:1 1 150px; border:1px solid var(--borde); border-radius:var(--radio); padding:10px 12px; background:var(--fondo); font-size:14px; position:relative}
+.arq .caja b{display:block; color:var(--azul); font-weight:600; margin-bottom:3px}
+.arq .caja.web{border-color:var(--azul); border-width:2px}
+.arq .flecha{align-self:center; color:var(--texto-suave); font-size:20px; padding:0 2px}
+.columnas{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:18px; margin-top:14px}
+.columnas h3{font-size:16px; font-weight:600; margin-bottom:8px}
+.columnas ul{margin:0; padding-left:18px; font-size:14.5px; line-height:1.5}
+.columnas li{margin-bottom:4px}
+.aviso code{font-family:ui-monospace,Menlo,Consolas,monospace; font-size:14px; background:rgba(0,0,0,.06); padding:0 4px; border-radius:2px}
+.pendiente{background:#fff2cc; color:#222; padding:0 4px; border-radius:2px; font-size:13px}
+footer{max-width:var(--max); margin:0 auto; padding:0 24px 40px; color:var(--texto-suave); font-size:13px}
+
+@media (max-width:640px){
+  .cab h1{font-size:20px}
+  .acciones{align-items:stretch; width:100%}
+  .acciones .fila{justify-content:stretch}
+  .acciones .btn{flex:1; justify-content:center}
+  .estado-linea{text-align:left; max-width:none}
+  main{padding:20px 16px 40px}
+  .tarjeta .valor{font-size:26px}
+}
+@media print{ .cab .acciones,.banda{display:none} }
+</style>
+</head>
+<body>
+
+<!-- ============ PANTALLA DE ACCESO ============ -->
+<div id="login">
+  <div>
+    <div class="login-caja">
+      <h1>Planificación de la producción</h1>
+      <p class="sub">Previsión de demanda con flujos automatizados. Bandejas termosellables para alimentos preparados.</p>
+      <div id="loginError" class="login-error" hidden></div>
+      <label for="clave">Clave de acceso</label>
+      <input id="clave" type="password" autocomplete="off" placeholder="Introduce la clave del cliente">
+      <button id="btnEntrar" class="btn" type="button"><span id="entrarTxt">Entrar</span></button>
+      <div class="login-demo"><button class="enlace" type="button" id="btnDemo">Ver con datos de prueba (sin conexión)</button></div>
+      <p class="login-nota">La clave se envía en la cabecera X-Api-Key de cada petición y solo se conserva en memoria mientras la página está abierta. No se guarda en el navegador.</p>
+    </div>
+    <p class="login-pie">Trabajo Fin de Grado. Ingeniería de Organización Industrial, URJC.</p>
+  </div>
+</div>
+
+<!-- ============ DASHBOARD ============ -->
+<div id="app" hidden>
+  <header class="cab">
+    <div class="int">
+      <div>
+        <h1>Previsión de demanda y plan de producción</h1>
+        <p class="prod" id="metaProducto">Bandejas termosellables para alimentos preparados</p>
+        <div class="meta">
+          <span>SKU <b id="metaSku">—</b></span>
+          <span>Horizonte <b id="metaHorizonte">—</b></span>
+          <span>Origen <b id="metaOrigen">—</b></span>
+          <span id="metaFechaWrap">Ejecutado <b id="metaFecha">—</b></span>
+          <span class="fuente" id="metaFuente">—</span>
+        </div>
+      </div>
+      <div class="acciones">
+        <div class="fila">
+          <span class="contador" id="contador" hidden></span>
+          <button class="btn sec small" type="button" id="btnSalir">Salir</button>
+        </div>
+        <div class="fila">
+          <button class="btn sec" type="button" id="btnConsultar">Consultar último resultado</button>
+          <button class="btn" type="button" id="btnGenerar"><span id="genSpin" class="spinner" hidden></span><span id="genTxt">Generar nueva previsión</span></button>
+        </div>
+        <div class="estado-linea" id="estadoLinea" role="status" aria-live="polite"></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="banda" id="bandaDemo" hidden>
+    <div class="aviso">
+      <div class="txt"><b>Datos de prueba.</b> Se muestra la respuesta de ejemplo del flujo de n8n (pinData del nodo «Preparación de datos»). No hay conexión con el servidor.</div>
+      <div class="acc">
+        <label for="demoEscenario" style="font-size:14px">Al pulsar «Generar», simular:</label>
+        <select id="demoEscenario">
+          <option value="ok">respuesta correcta (usadas 3 de 5)</option>
+          <option value="429">límite mensual agotado (429)</option>
+          <option value="timeout">sin respuesta (timeout)</option>
+          <option value="auth">clave rechazada (403)</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="banda" id="bandaError" hidden>
+    <div class="aviso error">
+      <div class="txt" id="errorTxt"></div>
+      <div class="acc">
+        <button class="btn small" type="button" id="errReintentar" hidden>Reintentar la previsión</button>
+        <button class="btn sec small" type="button" id="errConsultar" hidden>Consultar último resultado</button>
+        <button class="btn sec small" type="button" id="errClave" hidden>Cambiar la clave</button>
+        <button class="btn sec small" type="button" id="errCerrar">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="banda" id="banda429" hidden>
+    <div class="aviso">
+      <div class="txt" id="txt429"></div>
+      <div class="acc"><button class="btn sec small" type="button" id="cerrar429">Cerrar</button></div>
+    </div>
+  </div>
+
+  <main>
+    <section>
+      <div class="sec-cab"><h2 id="tituloPrimerMes">Resumen del primer mes previsto</h2><span class="nota">Unidades: bandejas (ud.)</span></div>
+      <div class="tarjetas" id="tarjetas"></div>
+      <div class="meses" id="meses"></div>
+    </section>
+
+    <section>
+      <div class="sec-cab"><h2>Evolución en el horizonte</h2><span class="nota">Colores según el estado calculado para cada mes</span></div>
+      <div class="graficos">
+        <div class="grafico">
+          <h3>Demanda prevista frente a media histórica</h3>
+          <p class="nota">Unidades por mes. El eje vertical no parte de cero para apreciar la diferencia.</p>
+          <div class="lienzo" id="lienzoDemanda"><canvas id="chartDemanda"></canvas></div>
+        </div>
+        <div class="grafico">
+          <h3>Uso de capacidad por mes</h3>
+          <p class="nota">Producción planificada sobre capacidad máxima. La línea discontinua marca el 100 %.</p>
+          <div class="lienzo" id="lienzoCapacidad"><canvas id="chartCapacidad"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-cab"><h2>Alertas operativas</h2><span class="nota" id="alertasNota"></span></div>
+      <div class="alertas" id="alertas"></div>
+    </section>
+
+    <section>
+      <div class="sec-cab">
+        <h2>Detalle por mes</h2>
+        <span class="nota">
+          <button class="btn sec small" type="button" id="btnVerTodo">Ver todas las columnas</button>
+          <button class="btn sec small" type="button" id="btnCsv">Exportar CSV</button>
+        </span>
+      </div>
+      <div class="tabla-env"><table id="tabla"><thead></thead><tbody></tbody></table></div>
+    </section>
+
+    <section>
+      <details id="detInforme">
+        <summary>Informe de planificación (el mismo que se envía por correo)</summary>
+        <div class="det-cuerpo">
+          <iframe id="informeFrame" sandbox="allow-same-origin" title="Informe de planificación de producción"></iframe>
+          <p class="informe-nota" id="informeNota"></p>
+        </div>
+      </details>
+    </section>
+
+    <section>
+      <details>
+        <summary>Sobre este sistema: arquitectura y estado del desarrollo</summary>
+        <div class="det-cuerpo">
+          <div class="arq">
+            <div class="caja"><b>Google Sheets</b>Histórico de ventas, variables exógenas y parámetros de producción</div>
+            <span class="flecha">→</span>
+            <div class="caja"><b>n8n</b>Orquesta los flujos: ejecución mensual programada y previsión bajo demanda</div>
+            <span class="flecha">→</span>
+            <div class="caja"><b>API Python (FastAPI)</b>Selección de modelo, previsión, evaluación y reentrenamiento</div>
+            <span class="flecha">→</span>
+            <div class="caja"><b>PostgreSQL</b>Ventas, previsiones, errores, cuota de ejecuciones y resultados</div>
+            <span class="flecha">→</span>
+            <div class="caja"><b>OpenAI</b>Solo redacta el informe a partir de las alertas calculadas</div>
+            <span class="flecha">→</span>
+            <div class="caja web"><b>Gmail y este panel</b>El correo y la web muestran el mismo resultado guardado</div>
+          </div>
+          <div class="columnas">
+            <div>
+              <h3>Implementado</h3>
+              <ul>
+                <li>Cálculo del plan de producción y de las alertas por mes (n8n).</li>
+                <li>Endpoint de consulta del último resultado guardado (GET).</li>
+                <li>Endpoint de previsión bajo demanda (POST) con cuota de 5 al mes, controlada en n8n y PostgreSQL.</li>
+                <li>Autenticación por cabecera X-Api-Key en los webhooks.</li>
+                <li>Este panel: acceso con clave, tarjetas, gráficos, alertas, tabla, informe y gestión de errores, timeout y cuota.</li>
+              </ul>
+            </div>
+            <div>
+              <h3>Diseñado, pendiente de datos</h3>
+              <ul>
+                <li>Modelo seleccionado y error de validación de la previsión: <span class="pendiente">[PENDIENTE DE ampliar la respuesta del endpoint]</span>.</li>
+                <li>Fecha de ejecución en la previsión bajo demanda (hoy solo la devuelve la consulta).</li>
+              </ul>
+            </div>
+            <div>
+              <h3>Trabajo futuro (propuesto)</h3>
+              <ul>
+                <li>Histórico de previsiones en la web y comparación entre ejecuciones.</li>
+                <li>Varios SKU y selección de producto.</li>
+                <li>Edición de los parámetros de producción desde el panel.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </details>
+    </section>
+  </main>
+  <footer>La cuota de previsiones manuales la controla el servidor; este panel solo muestra el valor que devuelve. Los estados y colores coinciden con los del informe enviado por correo.</footer>
+</div>
+
+<script>
+'use strict';
+/* =========================================================
+   CONFIGURACIÓN
+   Las URL son las de los webhooks públicos de n8n. La seguridad
+   no depende de ocultarlas: la protege la cabecera X-Api-Key,
+   validada en n8n con la misma credencial Header Auth en ambos
+   webhooks. El flujo está activo, así que se usa la ruta de
+   producción /webhook/ (la ruta /webhook-test/ solo responde
+   mientras el flujo está en modo escucha en el editor).
+   ========================================================= */
+const CONFIG = {
+  URL_CONSULTA: 'https://automation-hub-n8n.n9jg6g.easypanel.host/webhook/consulta-resultados',
+  URL_GENERAR:  'https://automation-hub-n8n.n9jg6g.easypanel.host/webhook/Generar-prevision',
+  TIMEOUT_MS: 120000
+};
+
+/* Colores por categoría: idénticos a los del informe por correo.
+   NORMAL no está definido en el informe; el verde es decisión de este panel. */
+const CAT = {
+  ROTURA_STOCK:        { bg:'#f4cccc', head:'#e6a5a5', label:'Rotura de stock' },
+  DESVIACION_GRAVE:    { bg:'#f8d7da', head:'#f1aeb5', label:'Desviación grave' },
+  FALTA_CAPACIDAD:     { bg:'#ffe8cc', head:'#ffd19a', label:'Falta de capacidad' },
+  USO_CAPACIDAD_ALTO:  { bg:'#fff2cc', head:'#f3dca0', label:'Uso de capacidad alto' },
+  STOCK_BAJO:          { bg:'#fff8cc', head:'#ffec99', label:'Stock bajo' },
+  SOBRESTOCK:          { bg:'#efe3ff', head:'#d9c2f0', label:'Sobrestock' },
+  DESVIACION_MODERADA: { bg:'#eaf3ff', head:'#cfe2ff', label:'Desviación moderada' },
+  LOTE_PRODUCCION:     { bg:'#f2f2f2', head:'#dddddd', label:'Lote de producción' },
+  NORMAL:              { bg:'#e8f5e9', head:'#b9dfbd', label:'Normal' }
+};
+const CAT_DESC = { bg:'#f2f2f2', head:'#dddddd', label:'Sin estado' };
+const cat = e => CAT[e] || { ...CAT_DESC, label: e || 'Sin estado' };
+const TIPO = { CRITICO:'Crítica', CRITICA:'Crítica', AVISO:'Aviso', INFO:'Informativa', INFORMATIVA:'Informativa', OK:'OK' };
+
+/* Datos de prueba: respuesta real del nodo «Preparación de datos» (pinData del workflow). */
+const SAMPLE = {"ok":true,"sku":"A123","mes":"2024-05","origen":"manual","kpis":[{"mes":"2024-05-01","sku":"A123","demanda_prevista":127200,"demanda_media_historica":129450,"desviacion_demanda_pct":-1.74,"stock_seguridad":13000,"stock_inicial":15000,"stock_final":17800,"produccion_necesaria":131600,"produccion_planificada":130000,"capacidad_maxima":130000,"uso_capacidad_pct":100,"horas_disponibles_mes":160,"horas_requeridas":160,"demanda_no_cubierta":0,"ratio_cobertura":0.14,"estado":"FALTA_CAPACIDAD","alternativa_recomendada":"Ampliar la jornada de 8h a 8.7h durante 3 días."},{"mes":"2024-06-01","sku":"A123","demanda_prevista":126700,"demanda_media_historica":130800,"desviacion_demanda_pct":-3.13,"stock_seguridad":13100,"stock_inicial":17800,"stock_final":19500,"produccion_necesaria":128400,"produccion_planificada":128400,"capacidad_maxima":130000,"uso_capacidad_pct":98.77,"horas_disponibles_mes":160,"horas_requeridas":158.03,"demanda_no_cubierta":0,"ratio_cobertura":0.154,"estado":"USO_CAPACIDAD_ALTO","alternativa_recomendada":"No requiere medidas adicionales."},{"mes":"2024-07-01","sku":"A123","demanda_prevista":124800,"demanda_media_historica":127650,"desviacion_demanda_pct":-2.23,"stock_seguridad":12800,"stock_inicial":19500,"stock_final":19100,"produccion_necesaria":124400,"produccion_planificada":124400,"capacidad_maxima":130000,"uso_capacidad_pct":95.69,"horas_disponibles_mes":160,"horas_requeridas":153.11,"demanda_no_cubierta":0,"ratio_cobertura":0.153,"estado":"USO_CAPACIDAD_ALTO","alternativa_recomendada":"No requiere medidas adicionales."},{"mes":"2024-08-01","sku":"A123","demanda_prevista":95400,"demanda_media_historica":98400,"desviacion_demanda_pct":-3.05,"stock_seguridad":9900,"stock_inicial":19100,"stock_final":14700,"produccion_necesaria":91000,"produccion_planificada":91000,"capacidad_maxima":130000,"uso_capacidad_pct":70,"horas_disponibles_mes":160,"horas_requeridas":112,"demanda_no_cubierta":0,"ratio_cobertura":0.154,"estado":"NORMAL","alternativa_recomendada":"No requiere medidas adicionales."},{"mes":"2024-09-01","sku":"A123","demanda_prevista":122600,"demanda_media_historica":124950,"desviacion_demanda_pct":-1.88,"stock_seguridad":12500,"stock_inicial":14700,"stock_final":18700,"produccion_necesaria":126600,"produccion_planificada":126600,"capacidad_maxima":130000,"uso_capacidad_pct":97.38,"horas_disponibles_mes":160,"horas_requeridas":155.82,"demanda_no_cubierta":0,"ratio_cobertura":0.153,"estado":"USO_CAPACIDAD_ALTO","alternativa_recomendada":"No requiere medidas adicionales."}],"alertas":[{"sku":"A123","fecha_prevision":"2024-05-01","mes":"2024-05-01","tipo":"AVISO","categoria":"FALTA_CAPACIDAD","alerta":"La producción necesaria supera la capacidad disponible del periodo.","impacto_operativo":"La capacidad actual no permite fabricar todo lo necesario considerando demanda, stock de seguridad y margen operativo.","recomendacion":"Ampliar la jornada de 8h a 8.7h durante 3 días.","prioridad":2,"enviar_email":true,"demanda_prevista":127200,"demanda_media_historica":129450,"desviacion_demanda_pct":-1.74,"umbral_desviacion_moderada_pct":15,"umbral_desviacion_grave_pct":25,"observaciones":2,"stock_inicial":15000,"stock_final":17800,"stock_seguridad":13000,"margen_operativo_pct":5,"margen_operativo_unidades":6400,"umbral_sobrestock":32363,"produccion_necesaria":131600,"produccion_planificada":130000,"lote_produccion":100,"capacidad_maxima":130000,"capacidad_disponible":130000,"uso_capacidad_pct":100,"horas_disponibles_mes":160,"horas_requeridas":160,"deficit_capacidad_unidades":1600,"deficit_capacidad_horas":1.97,"dias_extra_necesarios":1,"demanda_no_cubierta":0,"ratio_cobertura":0.14,"alternativa_recomendada":"Ampliar la jornada de 8h a 8.7h durante 3 días.","estado":"FALTA_CAPACIDAD","estados_detectados":"FALTA_CAPACIDAD"},{"sku":"A123","fecha_prevision":"2024-06-01","mes":"2024-06-01","tipo":"AVISO","categoria":"USO_CAPACIDAD_ALTO","alerta":"El plan utiliza un porcentaje elevado de la capacidad disponible.","impacto_operativo":"La planificación es viable, pero queda poco margen ante retrasos, incidencias o aumentos de demanda.","recomendacion":"Revisar disponibilidad de turnos, personal, mantenimiento y contingencias antes de confirmar el plan.","prioridad":2,"enviar_email":true,"demanda_prevista":126700,"demanda_media_historica":130800,"desviacion_demanda_pct":-3.13,"umbral_desviacion_moderada_pct":15,"umbral_desviacion_grave_pct":25,"observaciones":2,"stock_inicial":17800,"stock_final":19500,"stock_seguridad":13100,"margen_operativo_pct":5,"margen_operativo_unidades":6400,"umbral_sobrestock":32700,"produccion_necesaria":128400,"produccion_planificada":128400,"lote_produccion":100,"capacidad_maxima":130000,"capacidad_disponible":130000,"uso_capacidad_pct":98.77,"horas_disponibles_mes":160,"horas_requeridas":158.03,"deficit_capacidad_unidades":0,"deficit_capacidad_horas":0,"dias_extra_necesarios":0,"demanda_no_cubierta":0,"ratio_cobertura":0.154,"alternativa_recomendada":"No requiere medidas adicionales.","estado":"USO_CAPACIDAD_ALTO","estados_detectados":"USO_CAPACIDAD_ALTO"},{"sku":"A123","fecha_prevision":"2024-07-01","mes":"2024-07-01","tipo":"AVISO","categoria":"USO_CAPACIDAD_ALTO","alerta":"El plan utiliza un porcentaje elevado de la capacidad disponible.","impacto_operativo":"La planificación es viable, pero queda poco margen ante retrasos, incidencias o aumentos de demanda.","recomendacion":"Revisar disponibilidad de turnos, personal, mantenimiento y contingencias antes de confirmar el plan.","prioridad":2,"enviar_email":true,"demanda_prevista":124800,"demanda_media_historica":127650,"desviacion_demanda_pct":-2.23,"umbral_desviacion_moderada_pct":15,"umbral_desviacion_grave_pct":25,"observaciones":2,"stock_inicial":19500,"stock_final":19100,"stock_seguridad":12800,"margen_operativo_pct":5,"margen_operativo_unidades":6300,"umbral_sobrestock":31913,"produccion_necesaria":124400,"produccion_planificada":124400,"lote_produccion":100,"capacidad_maxima":130000,"capacidad_disponible":130000,"uso_capacidad_pct":95.69,"horas_disponibles_mes":160,"horas_requeridas":153.11,"deficit_capacidad_unidades":0,"deficit_capacidad_horas":0,"dias_extra_necesarios":0,"demanda_no_cubierta":0,"ratio_cobertura":0.153,"alternativa_recomendada":"No requiere medidas adicionales.","estado":"USO_CAPACIDAD_ALTO","estados_detectados":"USO_CAPACIDAD_ALTO"},{"sku":"A123","fecha_prevision":"2024-09-01","mes":"2024-09-01","tipo":"AVISO","categoria":"USO_CAPACIDAD_ALTO","alerta":"El plan utiliza un porcentaje elevado de la capacidad disponible.","impacto_operativo":"La planificación es viable, pero queda poco margen ante retrasos, incidencias o aumentos de demanda.","recomendacion":"Revisar disponibilidad de turnos, personal, mantenimiento y contingencias antes de confirmar el plan.","prioridad":2,"enviar_email":true,"demanda_prevista":122600,"demanda_media_historica":124950,"desviacion_demanda_pct":-1.88,"umbral_desviacion_moderada_pct":15,"umbral_desviacion_grave_pct":25,"observaciones":2,"stock_inicial":14700,"stock_final":18700,"stock_seguridad":12500,"margen_operativo_pct":5,"margen_operativo_unidades":6200,"umbral_sobrestock":31238,"produccion_necesaria":126600,"produccion_planificada":126600,"lote_produccion":100,"capacidad_maxima":130000,"capacidad_disponible":130000,"uso_capacidad_pct":97.38,"horas_disponibles_mes":160,"horas_requeridas":155.82,"deficit_capacidad_unidades":0,"deficit_capacidad_horas":0,"dias_extra_necesarios":0,"demanda_no_cubierta":0,"ratio_cobertura":0.153,"alternativa_recomendada":"No requiere medidas adicionales.","estado":"USO_CAPACIDAD_ALTO","estados_detectados":"USO_CAPACIDAD_ALTO"}],"informe":"<html lang=\"es\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <title>Informe de planificación de producción<\/title>\n  <\/head>\n  <body style=\"margin:0; padding:16px; font-family: Arial, sans-serif; max-width:760px; background:#ffffff; color:#222222;\">\n    <div style=\"max-width:760px; margin:0 auto;\">\n      <h1 style=\"font-size:28px; font-weight:bold; color:#003b73; margin-bottom:4px; margin-top:0;\">\n        Informe de planificación de producción - Bandejas termosellables para alimentos preparados\n      <\/h1>\n      <hr style=\"border:none; border-bottom:3px solid #003b73; margin-top:0; margin-bottom:24px;\" />\n      <section>\n        <h2 style=\"font-size:22px; font-weight:normal; color:#003b73; border-bottom:1px solid #d3d3d3; padding-bottom:6px; margin-top:0; margin-bottom:16px;\">\n          Resumen ejecutivo\n        <\/h2>\n        <p style=\"font-size:16px; line-height:1.4; margin-top:0; margin-bottom:32px;\">\n          Durante el periodo de mayo a septiembre de 2024, se han detectado 4 avisos relacionados con la falta de capacidad y el uso elevado de capacidad en la planificación de producción para el SKU A123. No se identificaron alertas críticas ni informativas. La planificación es viable, pero se recomienda atención para evitar riesgos operativos.\n        <\/p>\n      <\/section>\n      <section>\n        <h2 style=\"font-size:22px; font-weight:normal; color:#003b73; border-bottom:1px solid #d3d3d3; padding-bottom:6px; margin-top:0; margin-bottom:24px;\">\n          Alertas por categoría\n        <\/h2>\n        <!-- Bloque FALTA_CAPACIDAD -->\n        <div style=\"background:#ffe8cc; padding:20px; margin-bottom:32px;\">\n          <div style=\"background:#ffd19a; padding:8px 12px; margin-bottom:16px;\">\n            <span style=\"font-size:18px; font-weight:bold; color:#222222;\">Falta capacidad<\/span>\n          <\/div>\n          <p style=\"font-size:15px; margin-top:0; margin-bottom:12px;\">\n            La producción necesaria supera la capacidad disponible del periodo. La capacidad actual no permite fabricar todo lo necesario considerando demanda, stock de seguridad y margen operativo.\n          <\/p>\n          <table style=\"width:100%; border-collapse:collapse; margin-bottom:16px;\">\n            <thead>\n              <tr style=\"background:#ffd19a;\">\n                <th style=\"font-size:15px; font-weight:bold; color:#222222; border:1px solid #ccc; padding:6px; text-align:center; white-space: nowrap; min-width:95px;\">Mes<\/th>\n                <th style=\"font-size:15px; font-weight:bold; color:#222222; border:1px solid #ccc; padding:6px; text-align:center;\">Déficit unidades<\/th>\n                <th style=\"font-size:15px; font-weight:bold; color:#222222; border:1px solid #ccc; padding:6px; text-align:center;\">Déficit horas<\/th>\n                <th style=\"font-size:15px; font-weight:bold; color:#222222; border:1px solid #ccc; padding:6px; text-align:center;\">Días extra necesarios<\/th>\n              <\/tr>\n            <\/thead>\n            <tbody>\n              <tr>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff; white-space: nowrap;\">mayo 2024<\/td>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff;\">1.600<\/td>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff;\">1,97<\/td>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff;\">1<\/td>\n              <\/tr>\n            <\/tbody>\n          <\/table>\n          <div>\n            <p style=\"font-size:17px; font-weight:bold; margin-top:0; margin-bottom:8px;\">Recomendaciones operativas<\/p>\n            <ul style=\"font-size:15px; margin-top:0; padding-left:20px; margin-bottom:0;\">\n              <li>Ampliar la jornada de 8h a 8,7h durante 3 días.<\/li>\n            <\/ul>\n          <\/div>\n        <\/div>\n        <!-- Bloque USO_CAPACIDAD_ALTO -->\n        <div style=\"background:#fff2cc; padding:20px; margin-bottom:32px;\">\n          <div style=\"background:#f3dca0; padding:8px 12px; margin-bottom:16px;\">\n            <span style=\"font-size:18px; font-weight:bold; color:#222222;\">Uso de capacidad alto<\/span>\n          <\/div>\n          <p style=\"font-size:15px; margin-top:0; margin-bottom:12px;\">\n            El plan utiliza un porcentaje elevado de la capacidad disponible. La producción planificada total es de 379.400 unidades, con una capacidad disponible total de 390.000 unidades. El uso medio de capacidad es del 97,28%. La planificación es viable, pero queda poco margen ante retrasos, incidencias o aumentos de demanda.\n          <\/p>\n          <table style=\"width:100%; border-collapse:collapse; margin-bottom:16px;\">\n            <thead>\n              <tr style=\"background:#e8c978;\">\n                <th style=\"font-size:15px; font-weight:bold; color:#222222; border:1px solid #ccc; padding:6px; text-align:center; white-space: nowrap; min-width:95px;\">Mes<\/th>\n                <th style=\"font-size:15px; font-weight:bold; color:#222222; border:1px solid #ccc; padding:6px; text-align:center;\">Uso de capacidad<\/th>\n                <th style=\"font-size:15px; font-weight:bold; color:#222222; border:1px solid #ccc; padding:6px; text-align:center;\">Producción planificada<\/th>\n                <th style=\"font-size:15px; font-weight:bold; color:#222222; border:1px solid #ccc; padding:6px; text-align:center;\">Capacidad disponible<\/th>\n                <th style=\"font-size:15px; font-weight:bold; color:#222222; border:1px solid #ccc; padding:6px; text-align:center;\">Horas requeridas<\/th>\n                <th style=\"font-size:15px; font-weight:bold; color:#222222; border:1px solid #ccc; padding:6px; text-align:center;\">Horas disponibles<\/th>\n              <\/tr>\n            <\/thead>\n            <tbody>\n              <tr>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff; white-space: nowrap;\">junio 2024<\/td>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff;\">98,77%<\/td>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff;\">128.400<\/td>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff;\">130.000<\/td>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff;\">158,03<\/td>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff;\">160<\/td>\n              <\/tr>\n              <tr>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff; white-space: nowrap;\">julio 2024<\/td>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff;\">95,69%<\/td>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff;\">124.400<\/td>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff;\">130.000<\/td>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff;\">153,11<\/td>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff;\">160<\/td>\n              <\/tr>\n              <tr>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff; white-space: nowrap;\">septiembre 2024<\/td>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff;\">97,38%<\/td>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff;\">126.600<\/td>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff;\">130.000<\/td>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff;\">155,82<\/td>\n                <td style=\"font-size:15px; border:1px solid #ccc; padding:6px; text-align:center; background:#ffffff;\">160<\/td>\n              <\/tr>\n            <\/tbody>\n          <\/table>\n          <div>\n            <p style=\"font-size:17px; font-weight:bold; margin-top:0; margin-bottom:8px;\">Recomendaciones operativas<\/p>\n            <ul style=\"font-size:15px; margin-top:0; padding-left:20px; margin-bottom:0;\">\n              <li>Revisar la disponibilidad de turnos y personal para asegurar la capacidad necesaria.<\/li>\n              <li>Planificar mantenimientos y contingencias para minimizar riesgos de interrupciones.<\/li>\n              <li>Monitorear de cerca la producción y la demanda para reaccionar ante posibles desviaciones.<\/li>\n            <\/ul>\n          <\/div>\n        <\/div>\n      <\/section>\n    <\/div>\n  <\/body>\n<\/html>"};
+
+/* ---------- Estado en memoria (sin localStorage) ---------- */
+const state = { apiKey:null, demo:false, data:null, usadas:null, limite:null, fuente:null, cargando:false, verTodo:false, charts:{}, timer:null };
+const $ = id => document.getElementById(id);
+
+/* ---------- Utilidades ---------- */
+const nf = new Intl.NumberFormat('es-ES');
+const fmtNum = v => { if (v === null || v === undefined || v === '' || isNaN(v)) return '—'; const n = Math.round(Number(v)); return (n < 0 ? '-' : '') + String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); };
+const fmtDec = (v, d = 2) => (v === null || v === undefined || v === '' || isNaN(v)) ? '—' : new Intl.NumberFormat('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: d }).format(Number(v));
+const fmtPct = (v, d = 1) => v === null || v === undefined || isNaN(v) ? '—' : fmtDec(v, d) + ' %';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+function mesKey(v) { if (!v) return ''; const m = String(v).match(/^(\d{4})-(\d{2})/); return m ? `${m[1]}-${m[2]}` : String(v); }
+function fmtMes(key, largo = false) {
+  const [y, m] = String(key).split('-').map(Number);
+  if (!y || !m) return key || '—';
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('es-ES', { month: largo ? 'long' : 'short', year: 'numeric', timeZone: 'UTC' });
+}
+function fmtFecha(iso) { const d = new Date(iso); return isNaN(d) ? '—' : d.toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' }); }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* Normaliza las diferencias entre la respuesta del GET (fila de PostgreSQL) y la del POST. */
+function unwrap(b) {
+  if (typeof b === 'string') { try { b = JSON.parse(b); } catch (e) { /* texto plano */ } }
+  if (Array.isArray(b)) b = b[0];
+  if (b && b.json && !b.kpis) b = b.json;
+  return b;
+}
+function parseJson(v) { if (typeof v === 'string') { try { return JSON.parse(v); } catch (e) { return null; } } return v; }
+function normalizar(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const kpis = parseJson(raw.kpis), alertas = parseJson(raw.alertas);
+  if (!Array.isArray(kpis) || !kpis.length) return null;
+  const num = v => (v === null || v === undefined || v === '') ? null : Number(v);
+  return {
+    ok: raw.ok !== false,
+    sku: raw.sku || kpis[0].sku || '—',
+    mes: mesKey(raw.mes || kpis[0].mes),
+    origen: raw.origen || null,
+    fecha_ejecucion: raw.fecha_ejecucion || null,
+    kpis: kpis.map(k => ({ ...k, mesKey: mesKey(k.mes) })),
+    alertas: (Array.isArray(alertas) ? alertas : []).map(a => ({ ...a, mesKey: mesKey(a.mes || a.fecha_prevision) })),
+    informe: typeof raw.informe === 'string' ? raw.informe : '',
+    usadas: num(raw.usadas), limite: num(raw.limite)
+  };
+}
+
+/* ---------- Peticiones ---------- */
+async function apiFetch(url, options = {}) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), CONFIG.TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { ...options, headers: { 'X-Api-Key': state.apiKey, ...(options.headers || {}) }, signal: ctrl.signal });
+    const text = await res.text();
+    let body = null; try { body = text ? JSON.parse(text) : null; } catch (e) { body = { _raw: text }; }
+    return { status: res.status, body };
+  } catch (e) {
+    throw Object.assign(new Error(e.name === 'AbortError' ? 'timeout' : 'red'), { tipo: e.name === 'AbortError' ? 'timeout' : 'red' });
+  } finally { clearTimeout(t); }
+}
+const esAuthError = s => s === 401 || s === 403;
+/* Texto que devuelve n8n en un error (p. ej. "Authorization data is wrong!"), para mostrarlo tal cual. */
+const msgServidor = b => { const m = b && (b.message || b.mensaje || b.error || b._raw); return m ? ` Mensaje del servidor: «${esc(String(m).slice(0, 200))}».` : ''; };
+function errorClave(status, body, accion) {
+  mostrarError(`<b>El servidor rechazó la clave al ${accion} (código ${status}).</b> La sesión se mantiene con los datos que ya tienes en pantalla.${msgServidor(body)} Si la clave es correcta, comprueba en n8n que la credencial Header Auth se llame exactamente <code>X-Api-Key</code> y sea la misma en los dos webhooks.`,
+    { reintentar: accion === 'generar', consultar: accion !== 'generar', cambiarClave: true });
+}
+
+/* ---------- Acceso ---------- */
+function mostrarLogin(msg) {
+  state.apiKey = null; state.demo = false; state.data = null; state.usadas = null; state.limite = null;
+  $('app').hidden = true; $('login').hidden = false;
+  $('clave').value = '';
+  const e = $('loginError'); e.hidden = !msg; e.textContent = msg || '';
+  ocultarError(); $('banda429').hidden = true;
+  setTimeout(() => $('clave').focus(), 50);
+}
+function mostrarApp() { $('login').hidden = true; $('app').hidden = false; window.scrollTo(0, 0); }
+
+async function entrar() {
+  const clave = $('clave').value.trim();
+  const err = $('loginError');
+  if (!clave) { err.hidden = false; err.textContent = 'Introduce la clave de acceso.'; return; }
+  $('btnEntrar').disabled = true; $('entrarTxt').textContent = 'Comprobando…'; err.hidden = true;
+  state.apiKey = clave; state.demo = false;
+  try {
+    const { status, body } = await apiFetch(CONFIG.URL_CONSULTA, { method: 'GET' });
+    if (esAuthError(status)) { state.apiKey = null; err.hidden = false; err.textContent = 'Clave incorrecta. Vuelve a introducirla.'; return; }
+    if (status >= 400) { state.apiKey = null; err.hidden = false; err.textContent = `El servidor respondió con el código ${status}. Comprueba que el flujo de consulta esté activo.` + msgServidor(body).replace(/<[^>]+>/g, ''); return; }
+    const data = normalizar(unwrap(body));
+    mostrarApp(); $('bandaDemo').hidden = true;
+    if (data) aplicarResultado(data, 'consulta');
+    else mostrarError('Todavía no hay ningún resultado guardado, o la respuesta no tiene el formato esperado.', { consultar: true });
+  } catch (e) {
+    state.apiKey = null; err.hidden = false;
+    err.textContent = e.tipo === 'timeout'
+      ? 'El servidor no respondió a tiempo. Inténtalo de nuevo.'
+      : 'No se pudo conectar con el servidor. Comprueba la conexión. Si la clave es incorrecta y el servidor no envía cabeceras CORS en el rechazo, el navegador también lo muestra así.';
+  } finally { $('btnEntrar').disabled = false; $('entrarTxt').textContent = 'Entrar'; }
+}
+
+function entrarDemo() {
+  state.apiKey = null; state.demo = true;
+  mostrarApp(); $('bandaDemo').hidden = false;
+  aplicarResultado(normalizar(sampleConsulta()), 'demo');
+}
+/* Versión «GET» de los datos de prueba: mes en ISO completa y sin ok/usadas/limite, como devuelve PostgreSQL. */
+function sampleConsulta() {
+  const { ok, usadas, limite, ...resto } = SAMPLE;
+  return { ...resto, mes: SAMPLE.mes + '-01T00:00:00.000Z', fecha_ejecucion: null };
+}
+
+/* ---------- Consultar y generar ---------- */
+async function consultar() {
+  if (state.cargando) return;
+  ocultarError(); $('banda429').hidden = true;
+  if (state.demo) { setStatus('Consultando (datos de prueba)…'); await sleep(600); aplicarResultado(normalizar(sampleConsulta()), 'demo'); setStatus(''); return; }
+  setStatus('Consultando el último resultado guardado…');
+  $('btnConsultar').disabled = true;
+  try {
+    const { status, body } = await apiFetch(CONFIG.URL_CONSULTA, { method: 'GET' });
+    if (esAuthError(status)) return errorClave(status, body, 'consultar');
+    if (status >= 400) return mostrarError(`El servidor respondió con el código ${status} al consultar.${msgServidor(body)}`, { consultar: true });
+    const data = normalizar(unwrap(body));
+    if (!data) return mostrarError('No hay ningún resultado guardado todavía, o la respuesta no tiene el formato esperado.', { consultar: true });
+    aplicarResultado(data, 'consulta');
+  } catch (e) {
+    mostrarError(e.tipo === 'timeout' ? 'La consulta no respondió a tiempo.' : 'No se pudo conectar con el servidor de flujos.', { consultar: true });
+  } finally { setStatus(''); $('btnConsultar').disabled = false; }
+}
+
+async function generarDemo() {
+  const esc = $('demoEscenario').value;
+  await sleep(esc === 'timeout' ? 2500 : 1500);
+  if (esc === '429') return { status: 429, body: { ok: false, mensaje: 'Has alcanzado el límite de 5 previsiones este mes', usadas: 5, limite: 5 } };
+  if (esc === 'auth') return { status: 403, body: { message: 'Authorization data is wrong!' } };
+  if (esc === 'timeout') throw Object.assign(new Error('timeout'), { tipo: 'timeout' });
+  return { status: 200, body: { ...SAMPLE, ok: true, origen: 'manual', usadas: 3, limite: 5 } };
+}
+
+async function generar() {
+  if (state.cargando) return;
+  ocultarError(); $('banda429').hidden = true;
+  setCargando(true);
+  try {
+    const r = state.demo
+      ? await generarDemo()
+      : await apiFetch(CONFIG.URL_GENERAR, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    if (esAuthError(r.status)) return errorClave(r.status, r.body, 'generar');
+    if (r.status === 429) {
+      const b = r.body || {};
+      state.usadas = b.usadas ?? null; state.limite = b.limite ?? null; renderContador();
+      $('txt429').innerHTML = `<b>Límite mensual alcanzado.</b> ${esc(b.mensaje || 'No quedan previsiones manuales este mes.')}` +
+        (b.limite != null ? ` (${fmtNum(b.usadas)} de ${fmtNum(b.limite)} usadas). La cuota se reinicia el día 1. Las ejecuciones programadas no consumen cuota.` : '');
+      $('banda429').hidden = false;
+      return;
+    }
+    if (r.status === 404) return mostrarError(`<b>El flujo no está publicado (código 404).</b>${msgServidor(r.body)} En n8n, activa el flujo «TFG DEFINITIVO 1» para que responda la URL de producción.`, { reintentar: true, consultar: true });
+    if (r.status >= 400) return mostrarError(`El flujo respondió con el código ${r.status}. El resultado puede no haberse generado.${msgServidor(r.body)}`, { reintentar: true, consultar: true });
+    const data = normalizar(unwrap(r.body));
+    if (!data) return mostrarError('La respuesta del flujo no tiene el formato esperado. Puedes consultar si el resultado se guardó igualmente.', { consultar: true });
+    aplicarResultado(data, 'manual');
+  } catch (e) {
+    mostrarError(e.tipo === 'timeout'
+      ? `<b>Sin respuesta en ${Math.round(CONFIG.TIMEOUT_MS / 1000)} segundos.</b> El flujo llama a la API de previsión y a OpenAI y puede seguir ejecutándose: consulta el último resultado en unos instantes, porque es posible que se haya guardado igualmente.`
+      : '<b>Se perdió la conexión durante la ejecución.</b> El resultado puede haberse guardado igualmente: consulta el último resultado o vuelve a intentarlo.',
+      { reintentar: true, consultar: true });
+  } finally { setCargando(false); }
+}
+
+/* ---------- Estados de la interfaz ---------- */
+function setStatus(t) { $('estadoLinea').textContent = t; }
+function setCargando(on) {
+  state.cargando = on;
+  $('btnGenerar').disabled = on; $('btnConsultar').disabled = on; $('btnSalir').disabled = on;
+  $('genSpin').hidden = !on;
+  $('genTxt').textContent = on ? 'Generando previsión…' : 'Generar nueva previsión';
+  clearInterval(state.timer);
+  if (on) {
+    const t0 = Date.now();
+    const tick = () => setStatus(`Ejecutando el flujo: previsión de demanda, plan de producción e informe. ${Math.round((Date.now() - t0) / 1000)} s (suele tardar 1 o 2 minutos).`);
+    tick(); state.timer = setInterval(tick, 1000);
+  } else setStatus('');
+}
+function mostrarError(html, { reintentar = false, consultar = false, cambiarClave = false } = {}) {
+  $('errorTxt').innerHTML = html;
+  $('errReintentar').hidden = !reintentar; $('errConsultar').hidden = !consultar; $('errClave').hidden = !cambiarClave;
+  $('bandaError').hidden = false;
+  $('bandaError').scrollIntoView({ block: 'nearest' });
+}
+function ocultarError() { $('bandaError').hidden = true; }
+function renderContador() {
+  const el = $('contador');
+  if (state.usadas === null || state.limite === null || isNaN(state.usadas) || isNaN(state.limite)) { el.hidden = true; return; }
+  const disp = Math.max(0, state.limite - state.usadas);
+  el.hidden = false;
+  el.textContent = `${disp} de ${state.limite} previsiones disponibles este mes`;
+  el.classList.toggle('agotado', disp === 0);
+  el.title = 'Valor devuelto por el servidor. La cuota se reinicia el día 1 de cada mes.';
+}
+
+/* ---------- Aplicar y pintar un resultado ---------- */
+function aplicarResultado(data, fuente) {
+  state.data = data; state.fuente = fuente;
+  state.usadas = data.usadas; state.limite = data.limite;   // null en la consulta y en ejecuciones programadas: se oculta
+  renderContador();
+  renderCabecera(); renderTarjetas(); renderMeses(); renderCharts(); renderAlertas(); renderTabla(); renderInforme();
+}
+function renderCabecera() {
+  const d = state.data, k = d.kpis;
+  $('metaSku').textContent = d.sku;
+  $('metaHorizonte').textContent = k.length ? `${fmtMes(k[0].mesKey)} a ${fmtMes(k[k.length - 1].mesKey)} (${k.length} meses)` : '—';
+  $('metaOrigen').textContent = d.origen === 'manual' ? 'manual (bajo demanda)' : d.origen === 'programada' ? 'programada (mensual)' : (d.origen || '—');
+  const fw = $('metaFechaWrap');
+  if (state.fuente === 'manual') fw.innerHTML = `Recibido <b>${esc(fmtFecha(new Date()))}</b>`;
+  else fw.innerHTML = `Ejecutado <b>${esc(d.fecha_ejecucion ? fmtFecha(d.fecha_ejecucion) : (state.fuente === 'demo' ? 'sin fecha en los datos de prueba' : '—'))}</b>`;
+  const f = $('metaFuente');
+  f.className = 'fuente' + (state.fuente === 'demo' ? ' demo' : '');
+  f.textContent = state.fuente === 'demo' ? 'Datos de prueba' : state.fuente === 'manual' ? 'Previsión generada ahora' : 'Último resultado guardado';
+  $('tituloPrimerMes').textContent = k.length ? `Resumen de ${fmtMes(k[0].mesKey, true)}, primer mes previsto` : 'Resumen del primer mes previsto';
+}
+function tarjeta({ et, valor, unidad = '', sub = '', clase = '', style = '' }) {
+  return `<div class="tarjeta ${clase}" style="${style}"><div class="et">${et}</div><div class="valor">${valor}${unidad ? `<small>${unidad}</small>` : ''}</div>${sub ? `<div class="sub ${sub.clase || ''}">${sub.txt ?? sub}</div>` : ''}</div>`;
+}
+function renderTarjetas() {
+  const k = state.data.kpis[0]; if (!k) { $('tarjetas').innerHTML = '<p class="vacio">Sin datos.</p>'; return; }
+  const desv = k.desviacion_demanda_pct;
+  const deficit = (k.produccion_necesaria ?? 0) - (k.produccion_planificada ?? 0);
+  const c = cat(k.estado);
+  $('tarjetas').innerHTML = [
+    tarjeta({ et: 'Demanda prevista', valor: fmtNum(k.demanda_prevista), unidad: 'ud.',
+      sub: { txt: `${desv > 0 ? '+' : ''}${fmtDec(desv, 2)} % frente a la media histórica (${fmtNum(k.demanda_media_historica)})` } }),
+    tarjeta({ et: 'Producción planificada', valor: fmtNum(k.produccion_planificada), unidad: 'ud.',
+      sub: deficit > 0 ? { txt: `Necesaria ${fmtNum(k.produccion_necesaria)}: faltan ${fmtNum(deficit)} ud.`, clase: 'mal' } : { txt: `Cubre la producción necesaria (${fmtNum(k.produccion_necesaria)})`, clase: 'bien' } }),
+    tarjeta({ et: 'Uso de capacidad', valor: fmtDec(k.uso_capacidad_pct, 1), unidad: '%',
+      sub: { txt: `${fmtDec(k.horas_requeridas, 1)} h requeridas de ${fmtDec(k.horas_disponibles_mes, 1)} h disponibles`, clase: k.uso_capacidad_pct >= 100 ? 'mal' : '' } }),
+    tarjeta({ et: 'Stock final previsto', valor: fmtNum(k.stock_final), unidad: 'ud.',
+      sub: k.stock_final < k.stock_seguridad ? { txt: `Por debajo del stock de seguridad (${fmtNum(k.stock_seguridad)})`, clase: 'mal' } : { txt: `Stock de seguridad ${fmtNum(k.stock_seguridad)} ud.` } }),
+    tarjeta({ et: 'Demanda no cubierta', valor: fmtNum(k.demanda_no_cubierta), unidad: 'ud.',
+      sub: { txt: `Ratio de cobertura ${fmtDec(k.ratio_cobertura, 3)}`, clase: k.demanda_no_cubierta > 0 ? 'mal' : 'bien' } }),
+    tarjeta({ et: 'Estado del mes', valor: esc(c.label), clase: 'estado', style: `background:${c.bg};border-top-color:${c.head}`,
+      sub: { txt: esc(k.alternativa_recomendada || '') } })
+  ].join('');
+}
+function renderMeses() {
+  $('meses').innerHTML = state.data.kpis.map(k => { const c = cat(k.estado);
+    return `<div class="mes-chip" style="background:${c.head}"><div class="m">${esc(fmtMes(k.mesKey))}</div><div class="e">${esc(c.label)}</div><div class="u">Capacidad ${fmtDec(k.uso_capacidad_pct, 1)} %</div></div>`; }).join('');
+}
+
+/* ---------- Gráficos (Chart.js) ---------- */
+function renderCharts() {
+  const k = state.data.kpis;
+  if (typeof Chart === 'undefined') {
+    ['lienzoDemanda', 'lienzoCapacidad'].forEach(id => $(id).innerHTML = '<p class="fallback">Gráfico no disponible: no se pudo cargar la librería Chart.js desde el CDN. Los datos siguen en la tabla.</p>');
+    return;
+  }
+  Object.values(state.charts).forEach(ch => ch.destroy()); state.charts = {};
+  const oscuro = document.documentElement.dataset.theme === 'dark' || (matchMedia('(prefers-color-scheme: dark)').matches && document.documentElement.dataset.theme !== 'light');
+  Chart.defaults.font.family = '"IBM Plex Sans", Arial, sans-serif';
+  Chart.defaults.font.size = 13;
+  Chart.defaults.color = oscuro ? '#c9d1db' : '#3a4553';
+  const grid = oscuro ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.07)';
+  const labels = k.map(x => fmtMes(x.mesKey));
+  state.charts.demanda = new Chart($('chartDemanda'), {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: 'Demanda prevista', data: k.map(x => x.demanda_prevista), borderColor: '#003b73', backgroundColor: '#003b73', borderWidth: 2.5, tension: 0, pointRadius: 4, pointHoverRadius: 6 },
+      { label: 'Media histórica', data: k.map(x => x.demanda_media_historica), borderColor: '#8a94a6', backgroundColor: '#8a94a6', borderWidth: 2, borderDash: [6, 4], tension: 0, pointRadius: 3 }
+    ] },
+    options: { responsive: true, maintainAspectRatio: false,
+      scales: { y: { beginAtZero: false, grid: { color: grid }, ticks: { callback: v => fmtNum(v) } }, x: { grid: { display: false } } },
+      plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtNum(c.parsed.y)} ud.` } } } }
+  });
+  const maxUso = Math.max(110, ...k.map(x => Number(x.uso_capacidad_pct) || 0) ) + 5;
+  state.charts.capacidad = new Chart($('chartCapacidad'), {
+    data: { labels, datasets: [
+      { type: 'bar', label: 'Uso de capacidad', data: k.map(x => x.uso_capacidad_pct), backgroundColor: k.map(x => cat(x.estado).head), borderColor: k.map(x => cat(x.estado).head), borderWidth: 1, borderRadius: 3, maxBarThickness: 70 },
+      { type: 'line', label: 'Capacidad máxima (100 %)', data: k.map(() => 100), borderColor: '#b42318', borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0, fill: false }
+    ] },
+    options: { responsive: true, maintainAspectRatio: false,
+      scales: { y: { min: 0, max: Math.ceil(maxUso / 10) * 10, grid: { color: grid }, ticks: { callback: v => v + ' %' } }, x: { grid: { display: false } } },
+      plugins: { legend: { position: 'bottom', labels: { filter: i => i.datasetIndex === 1 } },
+        tooltip: { callbacks: { label: c => c.dataset.type === 'bar' ? `${fmtDec(c.parsed.y, 2)} %  (${cat(k[c.dataIndex].estado).label})` : `${c.dataset.label}` } } } }
+  });
+}
+
+/* ---------- Alertas ---------- */
+function renderAlertas() {
+  const al = [...state.data.alertas].sort((a, b) => (a.prioridad ?? 99) - (b.prioridad ?? 99) || String(a.mesKey).localeCompare(String(b.mesKey)));
+  $('alertasNota').textContent = al.length ? `${al.length} alerta${al.length === 1 ? '' : 's'}, ordenadas por prioridad` : '';
+  if (!al.length) { $('alertas').innerHTML = '<p class="vacio">Sin alertas operativas en este horizonte.</p>'; return; }
+  $('alertas').innerHTML = al.map(a => { const c = cat(a.categoria);
+    return `<div class="alerta" style="background:${c.bg}">
+      <div class="cabecera" style="background:${c.head}"><span>${esc(c.label)}</span><span>${esc(fmtMes(a.mesKey))} <span class="tipo">${esc(TIPO[a.tipo] || a.tipo || '')}${a.prioridad != null ? `, prioridad ${esc(a.prioridad)}` : ''}</span></span></div>
+      <p>${esc(a.alerta || '')}</p>
+      ${a.impacto_operativo ? `<p><b>Impacto:</b> ${esc(a.impacto_operativo)}</p>` : ''}
+      ${a.recomendacion ? `<p><b>Recomendación:</b> ${esc(a.recomendacion)}</p>` : ''}
+    </div>`; }).join('');
+}
+
+/* ---------- Tabla ---------- */
+const COLS_BASE = [
+  { k: 'mesKey', t: 'Mes', f: v => esc(fmtMes(v)), cls: 'mes' },
+  { k: 'demanda_prevista', t: 'Demanda prevista', f: fmtNum, num: true },
+  { k: 'demanda_media_historica', t: 'Media histórica', f: fmtNum, num: true },
+  { k: 'desviacion_demanda_pct', t: 'Desviación', f: v => fmtPct(v, 2), num: true },
+  { k: 'produccion_necesaria', t: 'Prod. necesaria', f: fmtNum, num: true },
+  { k: 'produccion_planificada', t: 'Prod. planificada', f: fmtNum, num: true },
+  { k: 'uso_capacidad_pct', t: 'Uso capacidad', f: v => fmtPct(v, 1), num: true },
+  { k: 'stock_final', t: 'Stock final', f: fmtNum, num: true },
+  { k: 'stock_seguridad', t: 'Stock seguridad', f: fmtNum, num: true },
+  { k: 'estado', t: 'Estado', cls: 'estado', f: v => { const c = cat(v); return `<span class="pill" style="background:${c.head}">${esc(c.label)}</span>`; } }
+];
+const COLS_EXTRA = [
+  { k: 'stock_inicial', t: 'Stock inicial', f: fmtNum, num: true },
+  { k: 'capacidad_maxima', t: 'Capacidad máx.', f: fmtNum, num: true },
+  { k: 'horas_disponibles_mes', t: 'Horas disp.', f: v => fmtDec(v, 1), num: true },
+  { k: 'horas_requeridas', t: 'Horas req.', f: v => fmtDec(v, 2), num: true },
+  { k: 'demanda_no_cubierta', t: 'Demanda no cubierta', f: fmtNum, num: true },
+  { k: 'ratio_cobertura', t: 'Ratio cobertura', f: v => fmtDec(v, 3), num: true },
+  { k: 'alternativa_recomendada', t: 'Alternativa recomendada', f: v => esc(v), cls: 'texto' }
+];
+function renderTabla() {
+  const cols = state.verTodo ? [...COLS_BASE, ...COLS_EXTRA] : COLS_BASE;
+  $('tabla').querySelector('thead').innerHTML = '<tr>' + cols.map(c => `<th class="${c.num ? 'num' : ''}">${c.t}</th>`).join('') + '</tr>';
+  $('tabla').querySelector('tbody').innerHTML = state.data.kpis.map(k =>
+    '<tr>' + cols.map(c => `<td class="${c.num ? 'num' : ''} ${c.cls || ''}">${c.f(k[c.k])}</td>`).join('') + '</tr>').join('');
+  $('btnVerTodo').textContent = state.verTodo ? 'Ver columnas principales' : 'Ver todas las columnas';
+}
+function exportarCsv() {
+  const cols = [...COLS_BASE, ...COLS_EXTRA];
+  const fila = vals => vals.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';');
+  const lineas = [fila(['sku', ...cols.map(c => c.k === 'mesKey' ? 'mes' : c.k)]), ...state.data.kpis.map(k => fila([state.data.sku, ...cols.map(c => k[c.k])]))];
+  const blob = new Blob(['\ufeff' + lineas.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `plan_produccion_${state.data.sku}_${state.data.mes}.csv`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+/* ---------- Informe (iframe aislado, sin scripts) ---------- */
+function renderInforme() {
+  const fr = $('informeFrame'), inf = state.data.informe;
+  if (!inf) { fr.srcdoc = '<p style="font-family:Arial;padding:12px">[PENDIENTE DE INFORME: la respuesta no incluye el informe]</p>'; $('informeNota').textContent = ''; return; }
+  fr.srcdoc = inf;
+  $('informeNota').textContent = 'El informe se muestra tal cual lo genera el flujo, aislado en un marco para que sus estilos no afecten al panel.';
+}
+$('informeFrame').addEventListener('load', () => {
+  const fr = $('informeFrame');
+  try { fr.style.height = (fr.contentDocument.documentElement.scrollHeight + 24) + 'px'; } catch (e) { fr.style.height = '900px'; }
+});
+$('detInforme').addEventListener('toggle', () => { if ($('detInforme').open) $('informeFrame').dispatchEvent(new Event('load')); });
+
+/* ---------- Eventos ---------- */
+$('btnEntrar').addEventListener('click', entrar);
+$('clave').addEventListener('keydown', e => { if (e.key === 'Enter') entrar(); });
+$('btnDemo').addEventListener('click', entrarDemo);
+$('btnSalir').addEventListener('click', () => mostrarLogin(''));
+$('btnGenerar').addEventListener('click', generar);
+$('btnConsultar').addEventListener('click', consultar);
+$('errReintentar').addEventListener('click', generar);
+$('errConsultar').addEventListener('click', consultar);
+$('errCerrar').addEventListener('click', ocultarError);
+$('errClave').addEventListener('click', () => mostrarLogin('Introduce la clave de nuevo.'));
+$('cerrar429').addEventListener('click', () => $('banda429').hidden = true);
+$('btnVerTodo').addEventListener('click', () => { state.verTodo = !state.verTodo; renderTabla(); });
+$('btnCsv').addEventListener('click', exportarCsv);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (state.data) renderCharts(); });
+$('clave').focus();
+</script>
+</body>
+</html>
